@@ -1,9 +1,10 @@
 import os
 import re
 import secrets
+import subprocess
 import tempfile
 import zipfile
-from flask import Flask, request, abort
+from flask import Flask, request, abort, Response
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB Upload
@@ -52,6 +53,22 @@ def build():
         if not os.path.isfile(os.path.join(src, main)):
             abort(400, f"{main} not found in zip")
 
-        files = sorted(os.listdir(src))
+        result = subprocess.run(
+            ["latexmk", "-pdf", "-interaction=nonstopmode",
+             "-halt-on-error", "-file-line-error", main],
+            cwd=src,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+        )
 
-    return {"ok": True, "main": main, "files": files}
+        pdf_path = os.path.join(src, main[:-4] + ".pdf")
+        if result.returncode != 0 or not os.path.isfile(pdf_path):
+            return Response(result.stdout[-5000:], status=422,
+                            mimetype="text/plain")
+
+        with open(pdf_path, "rb") as f:
+            pdf = f.read()
+
+    return Response(pdf, mimetype="application/pdf")
