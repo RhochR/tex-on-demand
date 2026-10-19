@@ -12,6 +12,7 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB Upload
 TOKEN = os.environ["BUILD_TOKEN"]
 MAX_UNZIPPED = 100 * 1024 * 1024  # 100 MB entpackt
 MAIN_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\.tex")
+TIMEOUT_LIMIT = 10 # in Seconds
 
 
 def check_token():
@@ -61,6 +62,7 @@ def build():
             stderr=subprocess.STDOUT,
             text=True,
             errors="replace",
+            timeout=TIMEOUT_LIMIT
         )
 
         pdf_path = os.path.join(src, main[:-4] + ".pdf")
