@@ -3,6 +3,7 @@ import re
 import secrets
 import signal
 import subprocess
+import sys
 import tempfile
 import zipfile
 from flask import Flask, request, abort, Response
@@ -10,7 +11,12 @@ from flask import Flask, request, abort, Response
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB Upload
 
-TOKEN = os.environ["BUILD_TOKEN"]
+TOKEN = os.environ.get("BUILD_TOKEN", "")
+if not TOKEN:
+    sys.exit(
+        "BUILD_TOKEN is not set. Start the container with a token, e.g.:\n"
+        "  docker run -p 8080:8000 -e BUILD_TOKEN=<secret> ghcr.io/rhochr/tex-on-demand:full"
+    )
 MAX_UNZIPPED = 100 * 1024 * 1024  # 100 MB entpackt
 MAIN_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\.tex")
 TIMEOUT_LIMIT = 30  # in Seconds
