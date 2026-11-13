@@ -13,10 +13,14 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB Upload
 
 TOKEN = os.environ.get("BUILD_TOKEN", "")
 if not TOKEN:
-    sys.exit(
+    print(
         "BUILD_TOKEN is not set. Start the container with a token, e.g.:\n"
-        "  docker run -p 8080:8000 -e BUILD_TOKEN=<secret> ghcr.io/rhochr/tex-on-demand:full"
+        "  docker run -p 8080:8000 -e BUILD_TOKEN=<secret> ghcr.io/rhochr/tex-on-demand:full",
+        file=sys.stderr,
     )
+    # Exit code 4 is gunicorn's APP_LOAD_ERROR: the master shuts down
+    # instead of respawning the worker in an endless loop.
+    sys.exit(4)
 MAX_UNZIPPED = 100 * 1024 * 1024  # 100 MB entpackt
 MAIN_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\.tex")
 TIMEOUT_LIMIT = 30  # in Seconds
