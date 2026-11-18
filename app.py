@@ -9,19 +9,35 @@ import zipfile
 from flask import Flask, request, abort, Response
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB Upload
 
-TOKEN = os.environ.get("BUILD_TOKEN", "")
-if not TOKEN:
-    print(
-        "BUILD_TOKEN is not set. Start the container with a token, e.g.:\n"
-        "  docker run -p 8080:8000 -e BUILD_TOKEN=<secret> ghcr.io/rhochr/tex-on-demand:full",
-        file=sys.stderr,
-    )
+
+def fail(message):
+    print(message, file=sys.stderr)
     # Exit code 4 is gunicorn's APP_LOAD_ERROR: the master shuts down
     # instead of respawning the worker in an endless loop.
     sys.exit(4)
-MAX_UNZIPPED = 100 * 1024 * 1024  # 100 MB entpackt
+
+
+def size_limit_mb(name, default):
+    """Liest ein Größenlimit in MB aus der Umgebung und gibt es in Bytes zurück."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default * 1024 * 1024
+    if not re.fullmatch(r"[0-9]+", raw) or int(raw) <= 0:
+        fail(f"{name} must be a positive whole number of megabytes, got {raw!r}")
+    return int(raw) * 1024 * 1024
+
+
+TOKEN = os.environ.get("BUILD_TOKEN", "")
+if not TOKEN:
+    fail(
+        "BUILD_TOKEN is not set. Start the container with a token, e.g.:\n"
+        "  docker run -p 8080:8000 -e BUILD_TOKEN=<secret> ghcr.io/rhochr/tex-on-demand:full"
+    )
+
+MAX_UPLOAD = size_limit_mb("MAX_UPLOAD_MB", 20)
+MAX_UNZIPPED = size_limit_mb("MAX_UNZIPPED_MB", 100)
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD
 MAIN_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\.tex")
 TIMEOUT_LIMIT = 30  # in Seconds
 
