@@ -18,28 +18,28 @@ def fail(message):
     sys.exit(4)
 
 
-def size_limit_mb(name, default):
-    """Liest ein Größenlimit in MB aus der Umgebung und gibt es in Bytes zurück."""
+def positive_int(name, default):
+    """Liest eine positive Ganzzahl aus der Umgebung, sonst den Standardwert."""
     raw = os.environ.get(name, "").strip()
     if not raw:
-        return default * 1024 * 1024
+        return default
     if not re.fullmatch(r"[0-9]+", raw) or int(raw) <= 0:
-        fail(f"{name} must be a positive whole number of megabytes, got {raw!r}")
-    return int(raw) * 1024 * 1024
+        fail(f"{name} must be a positive whole number, got {raw!r}")
+    return int(raw)
 
 
 TOKEN = os.environ.get("BUILD_TOKEN", "")
 if not TOKEN:
     fail(
         "BUILD_TOKEN is not set. Start the container with a token, e.g.:\n"
-        "  docker run -p 8080:8000 -e BUILD_TOKEN=<secret> ghcr.io/rhochr/tex-on-demand:full"
+        '  docker run -p 8080:8000 -e BUILD_TOKEN="token" ghcr.io/rhochr/tex-on-demand:full'
     )
 
-MAX_UPLOAD = size_limit_mb("MAX_UPLOAD_MB", 20)
-MAX_UNZIPPED = size_limit_mb("MAX_UNZIPPED_MB", 100)
+MAX_UPLOAD = positive_int("MAX_UPLOAD_MB", 20) * 1024 * 1024
+MAX_UNZIPPED = positive_int("MAX_UNZIPPED_MB", 100) * 1024 * 1024
+TIMEOUT_LIMIT = positive_int("BUILD_TIMEOUT", 30)  # in Sekunden
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD
 MAIN_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\.tex")
-TIMEOUT_LIMIT = 30  # in Seconds
 
 
 def check_token():
