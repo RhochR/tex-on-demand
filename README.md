@@ -81,11 +81,12 @@ curl -X POST http://localhost:8080/build \
 The names follow `main`, so `thesis.tex` gives `thesis.pdf`, `thesis.log` and
 `thesis.synctex.gz`.
 
-The server compiles in a temporary folder. Paths to that folder inside the log
-and SyncTeX file are rewritten: by default they become relative to the project
-root (`./chapters/intro.tex`). If you pass `root`, the absolute path of the
-project on your machine, they are rewritten to that path instead
-(`/home/me/thesis/./chapters/intro.tex`). Use this when your editor needs
+The server compiles in a temporary folder, so file paths in the log and
+SyncTeX file are relative to the project root by default
+(`chapters/intro.tex`). If you pass `root`, the absolute path of the project on
+your machine, paths in the SyncTeX file and any absolute paths to the temporary
+folder in the log are rewritten to start with it
+(`/home/me/thesis/chapters/intro.tex`). Use this when your editor needs
 absolute paths for SyncTeX. Windows paths like `C:\Users\me\thesis` work too.
 
 ## Configuration
