@@ -29,11 +29,23 @@ curl http://localhost:8080/health
 
 ## Usage
 
-Zip your project and send it to `/build`. Every request needs the header
-`Authorization: Bearer <your token>`.
+The API has one endpoint for compiling: `POST /build`. You send your whole
+LaTeX project as a zip file, the server compiles it with `latexmk` (pdfLaTeX)
+and sends the result back.
+
+Every request needs the header `Authorization: Bearer <your token>`, using the
+same token you passed as `BUILD_TOKEN` when starting the container.
+
+### Building a PDF
+
+Zip your project, including every file the document needs (chapters, images,
+bibliography, custom classes), and send it:
 
 ```bash
 zip -r project.zip main.tex chapters/ images/
+```
+
+```bash
 curl -X POST http://localhost:8080/build \
   -H "Authorization: Bearer token" \
   -F file=@project.zip \
@@ -41,27 +53,45 @@ curl -X POST http://localhost:8080/build \
   -o main.pdf
 ```
 
-- `file`: the zip archive (default limits: 20 MB upload, 100 MB unpacked)
-- `main`: the main `.tex` file inside the zip (default: `main.tex`)
-- `output`: `pdf` (default) or `zip`, see below
-- `root`: optional, only used with `output=zip`, see below
+If the build works, `main.pdf` is your document. If it fails, `main.pdf` is
+not a PDF but a text file with the end of the LaTeX output, which tells you
+what went wrong. Add `--fail-with-body` to the `curl` command if you want
+`curl` to report the failure with a non-zero exit code.
 
-On success the response is the PDF.
+### Request fields
+
+| Field | Required | Meaning |
+|---|---|---|
+| `file` | yes | The zip archive with your project (default limits: 20 MB upload, 100 MB unpacked) |
+| `main` | no | Path of the main `.tex` file inside the zip. It must be in the top folder of the zip and may only contain letters, digits, `_`, `-` and `.` (default: `main.tex`) |
+| `output` | no | `pdf` (default) returns only the PDF. `zip` returns the PDF together with the log and SyncTeX file, see [Log and SyncTeX](#log-and-synctex) |
+| `root` | no | Only used with `output=zip`. The absolute path of the project on your own computer, see [File paths and `root`](#file-paths-and-root) |
+
+### Responses
 
 | Status | Meaning |
 |---|---|
-| `200` | Success, the body is the PDF |
-| `400` | No file, not a zip, invalid `main` name or `main` file not found in the zip |
+| `200` | Success. The body is the PDF, or a zip with `output=zip` |
+| `400` | No file, not a zip, invalid `main` name, `main` file not found in the zip, or an invalid `output` or `root` value |
 | `401` | Missing or wrong token |
 | `413` | Upload or unpacked content larger than the configured limit |
-| `422` | Compilation failed or took longer than `BUILD_TIMEOUT`. The body contains the end of the LaTeX log or the timeout message (with `output=zip`, see below). |
+| `422` | Compilation failed or took longer than `BUILD_TIMEOUT`. The body contains the end of the LaTeX output or the timeout message as plain text. With `output=zip`, a failed compilation returns a zip with the log instead, see below |
 
-### Log and SyncTeX (`output=zip`)
+### Log and SyncTeX
 
-Editors like VS Code with LaTeX Workshop need more than the PDF: the `.log`
-file to show errors and warnings in the editor, and the `.synctex.gz` file to
-jump between the PDF and the source. With `output=zip` the response is a zip
-archive containing them:
+By default you only get the PDF back. That is enough for scripts, but editors
+like VS Code with the LaTeX Workshop extension need two more files that LaTeX
+writes during compilation:
+
+- **`main.log`**, the full LaTeX log. Editors read it to show errors and
+  warnings directly next to the line in your source that caused them.
+- **`main.synctex.gz`**, the SyncTeX file. It maps every position in the PDF
+  to a line in your source. Editors use it to jump from a line in the source
+  to the matching spot in the PDF and back (for example with Ctrl+click in
+  the PDF preview).
+
+To get them, add `-F output=zip`. The response is then a zip archive instead
+of a bare PDF:
 
 ```bash
 curl -X POST http://localhost:8080/build \
@@ -73,21 +103,52 @@ curl -X POST http://localhost:8080/build \
   -o result.zip
 ```
 
-| Status | Body |
-|---|---|
-| `200` | Zip with `main.pdf`, `main.log` and `main.synctex.gz` |
-| `422` | Zip with only `main.log` if compilation failed. On a timeout, or if no log was written at all, the body is plain text as in `pdf` mode. Check the `Content-Type` header (`application/zip` or `text/plain`). |
+```bash
+unzip -o result.zip
+```
 
-The names follow `main`, so `thesis.tex` gives `thesis.pdf`, `thesis.log` and
-`thesis.synctex.gz`.
+What the zip contains depends on the result:
 
-The server compiles in a temporary folder, so file paths in the log and
-SyncTeX file are relative to the project root by default
-(`chapters/intro.tex`). If you pass `root`, the absolute path of the project on
-your machine, paths in the SyncTeX file and any absolute paths to the temporary
-folder in the log are rewritten to start with it
-(`/home/me/thesis/chapters/intro.tex`). Use this when your editor needs
-absolute paths for SyncTeX. Windows paths like `C:\Users\me\thesis` work too.
+| Status | Content type | Body |
+|---|---|---|
+| `200` | `application/zip` | `main.pdf`, `main.log` and `main.synctex.gz` |
+| `422` | `application/zip` | Only `main.log`. Compilation failed, the log tells you why. No PDF is included, even if LaTeX wrote a partial one |
+| `422` | `text/plain` | The build ran into `BUILD_TIMEOUT`, or LaTeX stopped before it could write a log. The body is the same plain text message as without `output=zip` |
+
+So a `422` can be either a zip or plain text. A client should check the
+`Content-Type` header before unpacking the response.
+
+The file names follow `main`: with `-F main=thesis.tex` you get `thesis.pdf`,
+`thesis.log` and `thesis.synctex.gz`.
+
+Error messages in the log use the format `file:line: message`, for example
+`./chapters/intro.tex:12: Undefined control sequence.`, and lines are not
+wrapped. This is the format editors expect.
+
+### File paths and `root`
+
+The server compiles your project in a temporary folder that is deleted after
+the build. The log and SyncTeX file would normally contain paths to that
+folder, which mean nothing on your computer. The server therefore rewrites
+them before sending the files back:
+
+- **Without `root`**, paths to your files are relative to the top folder of
+  the zip, for example `chapters/intro.tex`.
+- **With `root`**, paths to your files start with the folder you passed. If
+  your project lives in `/home/me/thesis` and you send
+  `-F root=/home/me/thesis`, the SyncTeX file points to
+  `/home/me/thesis/chapters/intro.tex`.
+
+Pass `root` when you use the files in an editor. The SyncTeX file then points
+to your files exactly where they are on your computer, so the editor does not
+have to guess which folder relative paths belong to. In the `curl` example above,
+`"$PWD"` sends the current folder, so run it from your project folder.
+
+Windows paths work as well, for example `-F root="C:\Users\me\thesis"`.
+`root` may be at most 1024 characters long and must not contain line breaks.
+
+Files that come from TeX Live itself, such as `article.cls`, keep their paths
+on the server. Editors simply ignore them.
 
 ## Configuration
 
