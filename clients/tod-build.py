@@ -113,6 +113,9 @@ def main():
     parser.add_argument("--token-file", help="file containing the API token")
     parser.add_argument("--outdir", help="where to put PDF, log and SyncTeX "
                                          "(default: folder of the main file)")
+    parser.add_argument("--print-log", action="store_true",
+                        help="print the full LaTeX log to stdout, so editors "
+                             "that read the console output can show errors")
     parser.add_argument("--timeout", type=float, default=300,
                         help="seconds to wait for the server (default: 300)")
     args = parser.parse_args()
@@ -154,6 +157,10 @@ def main():
         os.makedirs(outdir, exist_ok=True)
         with zipfile.ZipFile(io.BytesIO(payload)) as z:
             names = set(z.namelist())
+            if args.print_log and stem + ".log" in names:
+                sys.stdout.write(z.read(stem + ".log")
+                                 .decode("utf-8", errors="replace"))
+                sys.stdout.flush()
             for name in (stem + ".log", stem + ".synctex.gz", stem + ".pdf"):
                 if name in names:
                     write_atomic(os.path.join(outdir, name), z.read(name))

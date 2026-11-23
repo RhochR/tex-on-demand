@@ -150,6 +150,118 @@ Windows paths work as well, for example `-F root="C:\Users\me\thesis"`.
 Files that come from TeX Live itself, such as `article.cls`, keep their paths
 on the server. Editors simply ignore them.
 
+## Using it from VS Code
+
+With the [LaTeX Workshop](https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop)
+extension you can compile on a tex-on-demand server instead of a local TeX
+installation. You keep the usual workflow: build on save, PDF preview next to
+the source, errors in the Problems panel and SyncTeX jumps between PDF and
+source. You do not need TeX Live on your computer, only Python 3.8 or newer.
+
+### How it works
+
+LaTeX Workshop normally runs `latexmk` on your computer. Instead, it can run
+any program as a build tool. The script
+[`clients/tod-build.py`](clients/tod-build.py) is such a tool:
+
+1. It zips the folder that contains your main `.tex` file, with all
+   subfolders. Build files (`.aux`, `.log`, `.synctex.gz` and similar),
+   the old PDF of the main file, hidden files and folders like `.git`, and
+   the output folder are left out. PDF figures are included.
+2. It sends the zip to the server with `output=zip` and your project folder
+   as `root`.
+3. It unpacks the PDF, log and SyncTeX file into the output folder, where
+   LaTeX Workshop picks them up. Files are replaced in one step, so the
+   preview never shows a half-written PDF.
+
+If the build fails, the old PDF stays in place, the new log is written, and
+the script exits with an error, so LaTeX Workshop reports a failed build.
+
+The main `.tex` file has to be in the top folder of your project, since the
+script uploads the folder it is in.
+
+### Setup
+
+**1. Start a server** as described in [Quick Start](#quick-start), or use one
+someone runs for you. You need its URL and token.
+
+**2. Get the script.** Download [`clients/tod-build.py`](clients/tod-build.py)
+and save it somewhere permanent, for example `~/tools/tod-build.py`. It only
+uses the Python standard library, nothing to install.
+
+**3. Save the token** in a file, so it does not end up in your VS Code
+settings or in a repository:
+
+```bash
+mkdir -p ~/.config/tex-on-demand
+```
+
+```bash
+echo "your-token" > ~/.config/tex-on-demand/token
+```
+
+On Windows the file is `C:\Users\<you>\.config\tex-on-demand\token`.
+
+**4. Add the build tool to VS Code.** Open your settings as JSON
+(Command Palette, *Preferences: Open User Settings (JSON)*) and add the
+entries from [`clients/vscode-settings.json`](clients/vscode-settings.json).
+Change two things:
+
+- the path to `tod-build.py` in `args`
+- the server URL in `TOD_URL`
+
+On Windows, use `"command": "python"` (or `"py"`) instead of `"python3"`, and
+write the path with forward slashes or doubled backslashes, for example
+`"C:/Users/me/tools/tod-build.py"`.
+
+The snippet also turns off LaTeX Workshop's *clean and retry*, which would
+otherwise send a failing project to the server a second time, and builds on
+save instead of on every file change.
+
+**5. Build.** Open your main `.tex` file and save it, or run
+*LaTeX Workshop: Build LaTeX project*. The output of the script is in the
+*Output* panel under *LaTeX Compiler*.
+
+If you want to keep a local `latexmk` recipe as well, add it after the
+tex-on-demand recipe in `latex-workshop.latex.recipes` and pick one with
+*LaTeX Workshop: Build with recipe*.
+
+### Script options
+
+You can also run the script on its own, for example in a terminal or a CI job:
+
+```bash
+TOD_URL=http://localhost:8080 python3 tod-build.py main.tex
+```
+
+| Option | Meaning |
+|---|---|
+| `main` | Path to the main `.tex` file (required) |
+| `--url` | Server URL. Default: the `TOD_URL` environment variable |
+| `--token` | Token. Default: the `TOD_TOKEN` environment variable, then the token file |
+| `--token-file` | File with the token. Default: `TOD_TOKEN_FILE`, then `~/.config/tex-on-demand/token` |
+| `--outdir` | Where PDF, log and SyncTeX file are written. Default: the folder of the main file |
+| `--print-log` | Also print the full LaTeX log to the console. The VS Code setup uses this, so LaTeX Workshop sees the errors in the compiler output as well as in the log file |
+| `--timeout` | Seconds to wait for the server. Default: 300 |
+
+Exit codes: `0` success, `1` compilation failed or timed out on the server,
+`2` any other problem (no token, wrong token, server not reachable, invalid
+arguments).
+
+Avoid passing the token with `--token` in shared settings files, since it is
+then stored in plain text there.
+
+### Things to know
+
+- **Every build uploads the whole project.** For big projects with many
+  images this takes a moment, and the upload must stay below the server's
+  `MAX_UPLOAD_MB`.
+- **Only pdfLaTeX through `latexmk` is used.** Settings like
+  `% !TEX program = xelatex` are ignored.
+- **The output folder must stay the same.** If you change
+  `latex-workshop.latex.outDir`, delete the old output folder, otherwise it
+  is uploaded with the project next time.
+
 ## Configuration
 
 All settings are passed as environment variables with `-e` on `docker run`.

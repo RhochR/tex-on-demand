@@ -1,0 +1,37 @@
+// Example settings for VS Code with the LaTeX Workshop extension.
+// Copy the entries into your settings.json (user or workspace settings).
+// Replace the script path and the server URL with your own values.
+{
+  "latex-workshop.latex.tools": [
+    {
+      "name": "tex-on-demand",
+      "command": "python3",
+      "args": [
+        "/path/to/tod-build.py",
+        "--print-log",
+        "--outdir",
+        "%OUTDIR%",
+        "%DOC_EXT%"
+      ],
+      "env": {
+        "TOD_URL": "http://localhost:8080"
+      }
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "tex-on-demand",
+      "tools": ["tex-on-demand"]
+    }
+  ],
+  "latex-workshop.latex.recipe.default": "tex-on-demand",
+
+  // By default LaTeX Workshop deletes auxiliary files and builds a second
+  // time after a failed build. With a remote build this only sends the
+  // same failing project to the server again.
+  "latex-workshop.latex.autoBuild.cleanAndRetry.enabled": false,
+
+  // Build when you save a file. The default ("onFileChange") also builds
+  // when files change outside VS Code.
+  "latex-workshop.latex.autoBuild.run": "onSave"
+}
