@@ -43,6 +43,8 @@ curl -X POST http://localhost:8080/build \
 
 - `file`: the zip archive (default limits: 20 MB upload, 100 MB unpacked)
 - `main`: the main `.tex` file inside the zip (default: `main.tex`)
+- `output`: `pdf` (default) or `zip`, see below
+- `root`: optional, only used with `output=zip`, see below
 
 On success the response is the PDF.
 
@@ -52,7 +54,39 @@ On success the response is the PDF.
 | `400` | No file, not a zip, invalid `main` name or `main` file not found in the zip |
 | `401` | Missing or wrong token |
 | `413` | Upload or unpacked content larger than the configured limit |
-| `422` | Compilation failed or took longer than `BUILD_TIMEOUT`. The body contains the end of the LaTeX log or the timeout message. |
+| `422` | Compilation failed or took longer than `BUILD_TIMEOUT`. The body contains the end of the LaTeX log or the timeout message (with `output=zip`, see below). |
+
+### Log and SyncTeX (`output=zip`)
+
+Editors like VS Code with LaTeX Workshop need more than the PDF: the `.log`
+file to show errors and warnings in the editor, and the `.synctex.gz` file to
+jump between the PDF and the source. With `output=zip` the response is a zip
+archive containing them:
+
+```bash
+curl -X POST http://localhost:8080/build \
+  -H "Authorization: Bearer token" \
+  -F file=@project.zip \
+  -F main=main.tex \
+  -F output=zip \
+  -F root="$PWD" \
+  -o result.zip
+```
+
+| Status | Body |
+|---|---|
+| `200` | Zip with `main.pdf`, `main.log` and `main.synctex.gz` |
+| `422` | Zip with only `main.log` if compilation failed. On a timeout, or if no log was written at all, the body is plain text as in `pdf` mode. Check the `Content-Type` header (`application/zip` or `text/plain`). |
+
+The names follow `main`, so `thesis.tex` gives `thesis.pdf`, `thesis.log` and
+`thesis.synctex.gz`.
+
+The server compiles in a temporary folder. Paths to that folder inside the log
+and SyncTeX file are rewritten: by default they become relative to the project
+root (`./chapters/intro.tex`). If you pass `root`, the absolute path of the
+project on your machine, they are rewritten to that path instead
+(`/home/me/thesis/./chapters/intro.tex`). Use this when your editor needs
+absolute paths for SyncTeX. Windows paths like `C:\Users\me\thesis` work too.
 
 ## Configuration
 
